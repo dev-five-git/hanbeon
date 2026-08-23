@@ -27,7 +27,7 @@ fn session_backend(
 
 #[cfg(any(target_os = "linux", test))]
 fn parse_wm_class(value: &[u8]) -> Vec<String> {
-    let Some(value) = value.strip_suffix(&[b'\0']) else {
+    let Some(value) = value.strip_suffix(b"\0") else {
         return Vec::new();
     };
     let mut fields = value.split(|byte| *byte == b'\0');
@@ -103,7 +103,7 @@ pub struct LinuxSource {
 
 #[cfg(target_os = "linux")]
 enum Backend {
-    X11(X11Backend),
+    X11(Box<X11Backend>),
     WaylandUnsupported,
     Unavailable,
 }
@@ -174,7 +174,7 @@ impl LinuxSource {
         ) {
             SessionBackend::WaylandUnsupported => Backend::WaylandUnsupported,
             SessionBackend::X11 => X11Backend::connect(display.as_deref())
-                .map(Backend::X11)
+                .map(|source| Backend::X11(Box::new(source)))
                 .unwrap_or(Backend::Unavailable),
             SessionBackend::Unavailable => Backend::Unavailable,
         };
