@@ -38,7 +38,7 @@ impl FocusedApplicationSource for WindowsSource {
 
         let path = String::from_utf16(&path[..path_length as usize]).ok()?;
         let executable = executable_basename(&path)?;
-        Some(FocusedApplication::windows(pid as i32, executable))
+        Some(FocusedApplication::windows(focused_pid(pid)?, executable))
     }
 }
 
@@ -65,9 +65,18 @@ fn executable_basename(path: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn focused_pid(pid: u32) -> Option<i32> {
+    i32::try_from(pid).ok()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::executable_basename;
+    use super::{executable_basename, focused_pid};
+
+    #[test]
+    fn rejects_a_process_identifier_that_does_not_fit_in_i32() {
+        assert_eq!(focused_pid(u32::MAX), None);
+    }
 
     #[test]
     fn keeps_only_windows_executable_basename() {
@@ -80,5 +89,13 @@ mod tests {
     #[test]
     fn rejects_a_path_without_a_file_name() {
         assert_eq!(executable_basename(r"C:\Program Files\Adobe\"), None);
+    }
+
+    #[test]
+    fn accepts_forward_slashes_as_path_separators() {
+        assert_eq!(
+            executable_basename("C:/Program Files/Adobe/Acrobat.exe"),
+            Some("Acrobat.exe".to_string())
+        );
     }
 }
