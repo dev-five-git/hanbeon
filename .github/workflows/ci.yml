@@ -57,6 +57,8 @@ jobs:
         run: bun run lint
 
       - name: Test
+        env:
+          BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0"
         run: bun run test
 
       - name: Build
