@@ -1,5 +1,7 @@
 //! 플랫폼별 활성 앱 조회를 스캔 루프에서 분리한다.
 
+#[cfg(any(target_os = "linux", test))]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "windows")]
@@ -40,9 +42,9 @@ impl FocusedApplication {
         }
     }
 
-    pub fn linux(pid: i32, desktop_id: Option<String>, wm_classes: Vec<String>) -> Self {
+    pub fn linux(pid: Option<i32>, desktop_id: Option<String>, wm_classes: Vec<String>) -> Self {
         Self {
-            pid: Some(pid),
+            pid,
             identity: ApplicationIdentity::Linux {
                 desktop_id,
                 wm_classes,
@@ -80,15 +82,20 @@ pub fn system_source() -> Box<dyn FocusedApplicationSource> {
     Box::new(windows::WindowsSource)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(target_os = "linux")]
+pub fn system_source() -> Box<dyn FocusedApplicationSource> {
+    Box::new(linux::LinuxSource::new())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn system_source() -> Box<dyn FocusedApplicationSource> {
     Box::new(UnsupportedSource)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 struct UnsupportedSource;
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 impl FocusedApplicationSource for UnsupportedSource {
     fn current(&mut self) -> Option<FocusedApplication> {
         None
@@ -110,5 +117,18 @@ mod tests {
     fn non_macos_identity_has_no_bundle_id() {
         let app = FocusedApplication::windows(7, "Acrobat.exe".into());
         assert_eq!(app.macos_bundle_id(), None);
+    }
+
+    #[test]
+    fn linux_identity_retains_a_missing_process_identifier() {
+        let app = FocusedApplication::linux(None, None, vec!["Spotify".into()]);
+        assert_eq!(app.pid(), None);
+        assert_eq!(
+            app.identity(),
+            &ApplicationIdentity::Linux {
+                desktop_id: None,
+                wm_classes: vec!["Spotify".into()],
+            }
+        );
     }
 }
