@@ -27,11 +27,27 @@ fn session_backend(
 
 #[cfg(any(target_os = "linux", test))]
 fn parse_wm_class(value: &[u8]) -> Vec<String> {
-    value
-        .split(|byte| *byte == b'\0')
-        .filter(|part| !part.is_empty())
-        .filter_map(|part| String::from_utf8(part.to_vec()).ok())
-        .collect()
+    let Some(value) = value.strip_suffix(&[b'\0']) else {
+        return Vec::new();
+    };
+    let mut fields = value.split(|byte| *byte == b'\0');
+    let Some(instance) = fields.next().filter(|field| !field.is_empty()) else {
+        return Vec::new();
+    };
+    let Some(class) = fields.next().filter(|field| !field.is_empty()) else {
+        return Vec::new();
+    };
+    if fields.next().is_some() {
+        return Vec::new();
+    }
+
+    let (Ok(instance), Ok(class)) = (
+        String::from_utf8(instance.to_vec()),
+        String::from_utf8(class.to_vec()),
+    ) else {
+        return Vec::new();
+    };
+    vec![instance, class]
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -211,7 +227,9 @@ impl X11Backend {
             self.atoms.active_window?,
             AtomEnum::WINDOW.into(),
         )?;
-        (reply.type_ == AtomEnum::WINDOW.into() && reply.format == 32 && reply.bytes_after == 0)
+        (reply.type_ == u32::from(AtomEnum::WINDOW)
+            && reply.format == 32
+            && reply.bytes_after == 0)
             .then_some(())?;
         let mut windows = reply.value32()?;
         let window = windows.next()?;
@@ -220,7 +238,9 @@ impl X11Backend {
 
     fn window_pid(&self, window: Window) -> Option<i32> {
         let reply = self.property(window, self.atoms.wm_pid?, AtomEnum::CARDINAL.into())?;
-        (reply.type_ == AtomEnum::CARDINAL.into() && reply.format == 32 && reply.bytes_after == 0)
+        (reply.type_ == u32::from(AtomEnum::CARDINAL)
+            && reply.format == 32
+            && reply.bytes_after == 0)
             .then_some(())?;
         let mut pids = reply.value32()?;
         let pid = pids.next()?;
@@ -233,7 +253,8 @@ impl X11Backend {
         else {
             return Vec::new();
         };
-        if reply.type_ != AtomEnum::STRING.into() || reply.format != 8 || reply.bytes_after != 0 {
+        if reply.type_ != u32::from(AtomEnum::STRING) || reply.format != 8 || reply.bytes_after != 0
+        {
             return Vec::new();
         }
 
@@ -260,7 +281,8 @@ impl X11Backend {
     fn text_property(&self, window: Window, property: Option<Atom>) -> Option<Vec<u8>> {
         let property = property?;
         let reply = self.property(window, property, AtomEnum::ANY.into())?;
-        ((self.atoms.utf8_string == Some(reply.type_) || reply.type_ == AtomEnum::STRING.into())
+        ((self.atoms.utf8_string == Some(reply.type_)
+            || reply.type_ == u32::from(AtomEnum::STRING))
             && reply.format == 8
             && reply.bytes_after == 0)
             .then_some(())?;
@@ -308,6 +330,29 @@ mod tests {
             parse_wm_class(b"spotify\0Spotify\0"),
             vec!["spotify".to_string(), "Spotify".to_string()]
         );
+    }
+
+    #[test]
+    fn rejects_a_wm_class_without_a_final_nul_terminator() {
+        assert_eq!(parse_wm_class(b"spotify\0Spotify"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn rejects_a_wm_class_with_more_than_two_fields() {
+        assert_eq!(
+            parse_wm_class(b"spotify\0Spotify\0Extra\0"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn rejects_a_wm_class_with_an_empty_field() {
+        assert_eq!(parse_wm_class(b"spotify\0\0"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn rejects_a_wm_class_with_invalid_utf8() {
+        assert_eq!(parse_wm_class(b"spotify\0\xff\0"), Vec::<String>::new());
     }
 
     #[test]
