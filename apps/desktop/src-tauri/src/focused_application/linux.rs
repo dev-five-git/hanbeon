@@ -59,6 +59,11 @@ fn parse_desktop_id(value: &[u8]) -> Option<String> {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn optional_atom(atom: u32) -> Option<u32> {
+    (atom != 0).then_some(atom)
+}
+
 #[cfg(target_os = "linux")]
 use std::env;
 
@@ -96,12 +101,47 @@ struct X11Backend {
 
 #[cfg(target_os = "linux")]
 struct Atoms {
-    active_window: Atom,
-    wm_pid: Atom,
-    gtk_application_id: Atom,
-    kde_desktop_file: Atom,
-    bamf_desktop_file: Atom,
-    utf8_string: Atom,
+    active_window: Option<Atom>,
+    wm_pid: Option<Atom>,
+    gtk_application_id: Option<Atom>,
+    kde_desktop_file: Option<Atom>,
+    bamf_desktop_file: Option<Atom>,
+    utf8_string: Option<Atom>,
+}
+
+#[cfg(target_os = "linux")]
+impl Atoms {
+    fn resolve(connection: &RustConnection) -> Self {
+        Self {
+            active_window: intern_atom(connection, b"_NET_ACTIVE_WINDOW"),
+            wm_pid: intern_atom(connection, b"_NET_WM_PID"),
+            gtk_application_id: intern_atom(connection, b"_GTK_APPLICATION_ID"),
+            kde_desktop_file: intern_atom(connection, b"_KDE_NET_WM_DESKTOP_FILE"),
+            bamf_desktop_file: intern_atom(connection, b"_BAMF_DESKTOP_FILE"),
+            utf8_string: intern_atom(connection, b"UTF8_STRING"),
+        }
+    }
+
+    fn refresh(&mut self, connection: &RustConnection) {
+        self.active_window = self
+            .active_window
+            .or_else(|| intern_atom(connection, b"_NET_ACTIVE_WINDOW"));
+        self.wm_pid = self
+            .wm_pid
+            .or_else(|| intern_atom(connection, b"_NET_WM_PID"));
+        self.gtk_application_id = self
+            .gtk_application_id
+            .or_else(|| intern_atom(connection, b"_GTK_APPLICATION_ID"));
+        self.kde_desktop_file = self
+            .kde_desktop_file
+            .or_else(|| intern_atom(connection, b"_KDE_NET_WM_DESKTOP_FILE"));
+        self.bamf_desktop_file = self
+            .bamf_desktop_file
+            .or_else(|| intern_atom(connection, b"_BAMF_DESKTOP_FILE"));
+        self.utf8_string = self
+            .utf8_string
+            .or_else(|| intern_atom(connection, b"UTF8_STRING"));
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -130,7 +170,7 @@ impl LinuxSource {
 #[cfg(target_os = "linux")]
 impl FocusedApplicationSource for LinuxSource {
     fn current(&mut self) -> Option<FocusedApplication> {
-        match &self.backend {
+        match &mut self.backend {
             Backend::X11(source) => source.current(),
             Backend::WaylandUnsupported | Backend::Unavailable => None,
         }
@@ -142,14 +182,7 @@ impl X11Backend {
     fn connect(display: Option<&str>) -> Option<Self> {
         let (connection, screen) = RustConnection::connect(display).ok()?;
         let root = connection.setup().roots.get(screen)?.root;
-        let atoms = Atoms {
-            active_window: intern_atom(&connection, b"_NET_ACTIVE_WINDOW")?,
-            wm_pid: intern_atom(&connection, b"_NET_WM_PID")?,
-            gtk_application_id: intern_atom(&connection, b"_GTK_APPLICATION_ID")?,
-            kde_desktop_file: intern_atom(&connection, b"_KDE_NET_WM_DESKTOP_FILE")?,
-            bamf_desktop_file: intern_atom(&connection, b"_BAMF_DESKTOP_FILE")?,
-            utf8_string: intern_atom(&connection, b"UTF8_STRING")?,
-        };
+        let atoms = Atoms::resolve(&connection);
 
         Some(Self {
             connection,
@@ -158,7 +191,8 @@ impl X11Backend {
         })
     }
 
-    fn current(&self) -> Option<FocusedApplication> {
+    fn current(&mut self) -> Option<FocusedApplication> {
+        self.atoms.refresh(&self.connection);
         let window = self.active_window()?;
         let pid = self.window_pid(window);
         let wm_classes = self.wm_classes(window);
@@ -172,7 +206,11 @@ impl X11Backend {
     }
 
     fn active_window(&self) -> Option<Window> {
-        let reply = self.property(self.root, self.atoms.active_window, AtomEnum::WINDOW.into())?;
+        let reply = self.property(
+            self.root,
+            self.atoms.active_window?,
+            AtomEnum::WINDOW.into(),
+        )?;
         (reply.type_ == AtomEnum::WINDOW.into() && reply.format == 32 && reply.bytes_after == 0)
             .then_some(())?;
         let mut windows = reply.value32()?;
@@ -181,7 +219,7 @@ impl X11Backend {
     }
 
     fn window_pid(&self, window: Window) -> Option<i32> {
-        let reply = self.property(window, self.atoms.wm_pid, AtomEnum::CARDINAL.into())?;
+        let reply = self.property(window, self.atoms.wm_pid?, AtomEnum::CARDINAL.into())?;
         (reply.type_ == AtomEnum::CARDINAL.into() && reply.format == 32 && reply.bytes_after == 0)
             .then_some(())?;
         let mut pids = reply.value32()?;
@@ -219,9 +257,10 @@ impl X11Backend {
         gtk_desktop_id.or(kde_desktop_id).or(bamf_desktop_id)
     }
 
-    fn text_property(&self, window: Window, property: Atom) -> Option<Vec<u8>> {
+    fn text_property(&self, window: Window, property: Option<Atom>) -> Option<Vec<u8>> {
+        let property = property?;
         let reply = self.property(window, property, AtomEnum::ANY.into())?;
-        ((reply.type_ == self.atoms.utf8_string || reply.type_ == AtomEnum::STRING.into())
+        ((self.atoms.utf8_string == Some(reply.type_) || reply.type_ == AtomEnum::STRING.into())
             && reply.format == 8
             && reply.bytes_after == 0)
             .then_some(())?;
@@ -256,12 +295,12 @@ fn intern_atom(connection: &RustConnection, name: &[u8]) -> Option<Atom> {
         .ok()?
         .reply()
         .ok()
-        .map(|reply| reply.atom)
+        .and_then(|reply| optional_atom(reply.atom))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionBackend, parse_desktop_id, parse_wm_class, session_backend};
+    use super::{SessionBackend, optional_atom, parse_desktop_id, parse_wm_class, session_backend};
 
     #[test]
     fn parses_both_wm_class_strings() {
@@ -285,5 +324,14 @@ mod tests {
             parse_desktop_id(b"/usr/share/applications/spotify.desktop\0"),
             Some("spotify.desktop".to_string())
         );
+    }
+
+    #[test]
+    fn absent_optional_atom_can_be_refreshed_when_it_later_exists() {
+        let cached_atom = optional_atom(0);
+        assert_eq!(cached_atom, None);
+
+        let refreshed_atom = cached_atom.or_else(|| optional_atom(321));
+        assert_eq!(refreshed_atom, Some(321));
     }
 }
