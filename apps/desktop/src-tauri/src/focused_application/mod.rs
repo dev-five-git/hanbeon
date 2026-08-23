@@ -2,6 +2,8 @@
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ApplicationIdentity {
@@ -73,15 +75,20 @@ pub fn system_source() -> Box<dyn FocusedApplicationSource> {
     Box::new(macos::MacOsSource)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn system_source() -> Box<dyn FocusedApplicationSource> {
+    Box::new(windows::WindowsSource)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn system_source() -> Box<dyn FocusedApplicationSource> {
     Box::new(UnsupportedSource)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 struct UnsupportedSource;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 impl FocusedApplicationSource for UnsupportedSource {
     fn current(&mut self) -> Option<FocusedApplication> {
         None
