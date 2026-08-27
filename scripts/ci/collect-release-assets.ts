@@ -41,18 +41,28 @@ export function collectReleaseAssets({
 
   const platformBundles = bundleByExtension[platform]
   const expectedBundles = Object.values(platformBundles).sort()
-  const artifacts = artifactPaths.map((sourcePath) => {
-    if (!statSync(sourcePath).isFile()) {
+  const artifacts = artifactPaths.flatMap((sourcePath) => {
+    const extension = extname(sourcePath)
+    const sourceStat = statSync(sourcePath)
+
+    if (
+      platform === 'macos' &&
+      extension.toLowerCase() === '.app' &&
+      sourceStat.isDirectory()
+    ) {
+      return []
+    }
+
+    if (!sourceStat.isFile()) {
       throw new Error(`Release artifact is not a file: ${sourcePath}`)
     }
 
-    const extension = extname(sourcePath)
     const bundle = platformBundles[extension.toLowerCase()]
     if (!bundle) {
       throw new Error(`Unexpected ${platform} release artifact: ${sourcePath}`)
     }
 
-    return { bundle, extension, sourcePath }
+    return [{ bundle, extension, sourcePath }]
   })
 
   const actualBundles = artifacts.map(({ bundle }) => bundle).sort()

@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -49,5 +55,25 @@ describe('collectReleaseAssets', () => {
         version: '0.1.1',
       }),
     ).toThrow('Expected appimage, deb bundles')
+  })
+
+  test('ignores the intermediate macOS app directory emitted with a DMG', () => {
+    const app = join(testRoot, '한번.app')
+    const dmg = join(testRoot, '한번_0.1.1_universal.dmg')
+    const outputDir = join(testRoot, 'macos-output')
+    mkdirSync(app)
+    writeFileSync(dmg, 'dmg')
+
+    const outputs = collectReleaseAssets({
+      arch: 'universal',
+      artifactPaths: [dmg, app],
+      outputDir,
+      platform: 'macos',
+      version: '0.1.1',
+    })
+
+    expect(outputs.map((path) => path.replaceAll('\\', '/'))).toEqual([
+      `${outputDir.replaceAll('\\', '/')}/hanbeon-0.1.1-macos-universal-dmg.dmg`,
+    ])
   })
 })
