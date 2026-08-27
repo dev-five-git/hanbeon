@@ -98,12 +98,12 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: --bundles nsis,msi
+            args: --bundles nsis msi
           - platform: macos-latest
             args: --target universal-apple-darwin --bundles dmg
             targets: aarch64-apple-darwin,x86_64-apple-darwin
           - platform: ubuntu-22.04
-            args: --bundles appimage,deb
+            args: --bundles appimage deb
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout code
