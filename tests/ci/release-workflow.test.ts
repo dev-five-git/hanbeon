@@ -33,6 +33,9 @@ const tauriConfig = JSON.parse(
     "utf8",
   ),
 ) as { version: string };
+const rootPackage = JSON.parse(
+  readFileSync(resolve(repositoryRoot, "package.json"), "utf8"),
+) as { private?: boolean };
 
 describe("desktop release workflow", () => {
   test("uses the changepacks package version for Tauri bundles", () => {
@@ -40,6 +43,12 @@ describe("desktop release workflow", () => {
   });
 
   test("exports the draft release receipt", () => {
+    const changepacksStep = workflow.jobs.changepacks.steps?.find((step) =>
+      step.uses?.startsWith("changepacks/action@"),
+    );
+
+    expect(rootPackage.private).toBe(true);
+    expect(changepacksStep?.with?.publish).toBe(true);
     expect(workflow.jobs.changepacks.outputs?.pending_releases).toBe(
       "${{ steps.changepacks.outputs.pending_releases }}",
     );

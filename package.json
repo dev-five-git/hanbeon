@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "한번 - 상황적응형 싱글스위치 접근성 소프트웨어",
   "license": "MIT",
+  "private": true,
   "type": "module",
   "devDependencies": {
     "eslint-plugin-devup": "^2.1.0",
