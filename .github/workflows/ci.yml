@@ -185,6 +185,7 @@ jobs:
           pattern: desktop-*
       - name: Upload bundles to the draft release
         env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ fromJSON(needs.changepacks.outputs.pending_releases)['package.json'].tagName }}
         shell: bash
