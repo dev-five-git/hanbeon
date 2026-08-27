@@ -1,7 +1,0 @@
-{
-  "changes": {
-    "package.json": "Patch"
-  },
-  "note": "윈도우, macOS, Linux 설치 파일을 GitHub Release에 자동으로 첨부합니다.",
-  "date": "2026-08-27T16:28:45.939578800Z"
-}
