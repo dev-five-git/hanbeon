@@ -130,6 +130,9 @@ describe('desktop release workflow', () => {
     const finalizeStep = finalizeJob.steps?.find((step) =>
       step.uses?.startsWith('changepacks/action@'),
     )
+    const uploadReleaseStep = uploadJob.steps?.find((step) =>
+      step.run?.includes('gh release upload'),
+    )
 
     expect(uploadJob.needs).toEqual(['changepacks', 'release-desktop'])
     expect(uploadJob.permissions).toEqual({ contents: 'write' })
@@ -137,6 +140,7 @@ describe('desktop release workflow', () => {
     expect(
       uploadJob.steps?.some((step) => step.run?.includes('gh release upload')),
     ).toBe(true)
+    expect(uploadReleaseStep?.env?.GH_REPO).toBe('${{ github.repository }}')
     expect(finalizeJob.needs).toEqual(['changepacks', 'upload-release'])
     expect(finalizeStep?.with?.finalize_releases).toBe(
       '${{ needs.changepacks.outputs.pending_releases }}',
