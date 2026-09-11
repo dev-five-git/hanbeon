@@ -21,15 +21,16 @@ jobs:
   # 공개 저장소이므로 모든 작업은 GitHub 호스팅 러너에서 돈다.
   # self-hosted 러너에서 PR 코드를 실행하면 (postinstall, 테스트, 빌드)
   # 누구든 PR 하나로 우리 인프라에서 임의 코드를 돌릴 수 있다.
-  # 배포는 이 워크플로에 두지 않는다.
   check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           components: clippy, rustfmt
       - name: Install Linux desktop dependencies
@@ -47,7 +48,7 @@ jobs:
             libudev-dev \
             pkg-config
       - name: Install cargo-tarpaulin
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2
         with:
           tool: cargo-tarpaulin
       - name: Install dependencies
@@ -75,8 +76,139 @@ jobs:
     needs:
       - check
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: changepacks/action@ff3d7d0ddbce5dd21c4db0fc5932493b320cf85e # main
         id: changepacks
+        with:
+          # 한번은 레지스트리에 배포할 패키지가 아닌 private 앱이다.
+          # publish 모드는 GitHub Release를 draft로 남기고 데스크톱 빌드에
+          # 최종 공개를 위임하기 위해 사용한다.
+          publish: true
     outputs:
       changepacks: ${{ steps.changepacks.outputs.changepacks }}
+      pending_releases: ${{ steps.changepacks.outputs.pending_releases }}
+
+  release-desktop:
+    name: release (${{ matrix.platform }})
+    needs:
+      - changepacks
+    if: ${{ contains(needs.changepacks.outputs.pending_releases, '"package.json"') }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            release_platform: windows
+            arch: x64
+            args: --bundles nsis msi
+          - platform: macos-latest
+            release_platform: macos
+            arch: universal
+            args: --target universal-apple-darwin --bundles dmg
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            release_platform: linux
+            arch: x64
+            args: --bundles appimage deb
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          targets: ${{ matrix.targets || '' }}
+      - name: Install Linux desktop dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libasound2-dev \
+            libudev-dev \
+            patchelf \
+            pkg-config
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build desktop bundles
+        id: tauri
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'macos-latest' && '-' || '' }}
+        with:
+          args: ${{ matrix.args }}
+          includeUpdaterJson: false
+          projectPath: apps/desktop
+          tauriScript: bun tauri
+      - name: Normalize release assets
+        env:
+          RELEASE_ARCH: ${{ matrix.arch }}
+          RELEASE_OUTPUT_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_PLATFORM: ${{ matrix.release_platform }}
+          RELEASE_VERSION: ${{ steps.tauri.outputs.appVersion }}
+          TAURI_ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: bun scripts/ci/collect-release-assets.ts
+      - name: Store release assets
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          if-no-files-found: error
+          name: desktop-${{ matrix.release_platform }}
+          path: ${{ runner.temp }}/release-assets/*
+          retention-days: 1
+
+  upload-release:
+    name: upload release assets
+    needs:
+      - changepacks
+      - release-desktop
+    if: ${{ contains(needs.changepacks.outputs.pending_releases, '"package.json"') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          merge-multiple: true
+          path: release-assets
+          pattern: desktop-*
+      - name: Upload bundles to the draft release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ fromJSON(needs.changepacks.outputs.pending_releases)['package.json'].tagName }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if [ "${#assets[@]}" -ne 5 ]; then
+            echo "Expected 5 desktop release assets, found ${#assets[@]}" >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+
+  finalize-release:
+    name: finalize release
+    needs:
+      - changepacks
+      - upload-release
+    if: ${{ contains(needs.changepacks.outputs.pending_releases, '"package.json"') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish completed release
+        uses: changepacks/action@ff3d7d0ddbce5dd21c4db0fc5932493b320cf85e # main
+        with:
+          finalize_releases: ${{ needs.changepacks.outputs.pending_releases }}

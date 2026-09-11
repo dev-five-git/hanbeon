@@ -1,8 +1,9 @@
 {
   "name": "hanbeon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "한번 - 상황적응형 싱글스위치 접근성 소프트웨어",
   "license": "MIT",
+  "private": true,
   "type": "module",
   "devDependencies": {
     "eslint-plugin-devup": "^2.1.0",
@@ -12,7 +13,7 @@
     "@devup-ui/bun-plugin": "1.0.12",
     "@types/bun": "^1.4",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "typescript": "npm:@typescript/typescript6@^6.0.2"
+    "typescript": "6.0.3"
   },
   "workspaces": [
     "apps/*"

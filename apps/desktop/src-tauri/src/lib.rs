@@ -321,7 +321,7 @@ pub fn run() {
                             Instant::now(),
                             |judgement| {
                                 input::announce(&switch_app, judgement);
-                                switch_scanner.handle(&switch_app, judgement);
+                                switch_scanner.handle(judgement);
                             },
                         );
                     },
@@ -336,6 +336,15 @@ pub fn run() {
                 arduino::ArduinoCoordinator::new(spawn_switch)
             };
             app.manage(native_switch);
+            let ble_app = app.handle().clone();
+            let ble_detector = Arc::clone(&detector);
+            let ble_scanner = scanner.clone();
+            app.manage(arduino::BleSwitch::spawn(move |event| {
+                arduino::route_switch_event(&ble_detector, event, Instant::now(), |judgement| {
+                    input::announce(&ble_app, judgement);
+                    ble_scanner.handle(judgement);
+                });
+            }));
             app.manage(firmware::FirmwareInstaller::default());
 
             let registered = input::register(
