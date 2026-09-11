@@ -109,6 +109,8 @@ mock.module('@devup-ui/react', () => {
     return DevupElement
   }
   return {
+    // Bun module mocks are shared with suites that render SettingsForm later.
+    setTheme: mock(() => {}),
     Box: passthrough('div'),
     Flex: passthrough('div'),
     Text: passthrough('p'),

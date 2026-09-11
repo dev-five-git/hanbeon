@@ -60,6 +60,13 @@ jobs:
       - name: Test
         run: bun run test
 
+      # Run without the connection suite's SettingsForm mock masking this import.
+      - name: Test settings with Arduino module mocks
+        run: >-
+          BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 bun test
+          ./apps/desktop/src/__tests__/arduino-setup.browser.test.tsx
+          ./apps/desktop/src/__tests__/trusted-switch-setup.browser.test.tsx
+
       - name: Build
         run: bun run build
 
