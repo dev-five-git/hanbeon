@@ -1,7 +1,0 @@
-{
-  "changes": {
-    "package.json": "Patch"
-  },
-  "note": "fix: reconcile Android branch dependency locks with main, preserving hanbeon-core and JNI together with desktop BLE dependencies, removing the obsolete TypeScript alias, and adapting serial and BLE gesture delivery to the extracted Scanner API.",
-  "date": "2026-09-11T09:43:47.000Z"
-}
