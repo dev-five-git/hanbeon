@@ -14,13 +14,14 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+hanbeon-core = { path = "../../../crates/hanbeon-core" }
 # macos-private-api: floating 창의 투명 배경(tauri.conf.json의 macOSPrivateApi)에 필요하다.
-tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-global-shortcut = "2.3.2"
-enigo = "0.6.1"
-rodio = { version = "0.22.2", default-features = false, features = ["playback"] }
+tauri-plugin-global-shortcut = { version = "2.3.2", optional = true }
+enigo = { version = "0.6.1", optional = true }
+rodio = { version = "0.22.2", default-features = false, features = ["playback"], optional = true }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std", "serde"] }
 serialport = "4.9.0"
 # reqwest는 app_registry(앱 프로필), ureq는 registry(보드 펌웨어)에서 쓴다.
@@ -38,6 +39,13 @@ uuid = "1.25.0"
 #   cargo add tauri-plugin-store             # 사용자 프로필 영속화 (M3)
 #   cargo add rodio                          # 청각 피드백 (M2)
 
+[features]
+default = []
+# 데스크톱 전용 기능: 트레이, 전역 단축키, 키 주입, 소리, 시리얼.
+# 데스크톱 빌드는 --features desktop으로 켠다. 안드로이드(tauri android)는
+# 기본 기능 없이 빌드된다.
+desktop = ["dep:tauri-plugin-global-shortcut", "dep:enigo", "dep:rodio", "tauri/tray-icon"]
+
 [target."cfg(target_os = \"macos\")".dependencies]
 accessibility = "0.2.0"
 accessibility-sys = "0.2.0"
@@ -50,5 +58,13 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Syste
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = "0.14.0"
+
+[target.aarch64-linux-android.dependencies]
+jni = "0.21"
 # floating 창이 대상 앱의 포커스를 뺏지 않도록 NSPanel(nonactivating)로 승격할 때 사용한다.
 #   cargo add objc2 objc2-app-kit
+
+# 통합 테스트는 데스크톱 기능(enigo·serialport)을 쓰는 모듈을 포함한다.
+[[test]]
+name = "arduino"
+required-features = ["desktop"]

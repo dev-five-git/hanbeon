@@ -4,31 +4,44 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewWindow};
-
-use crate::profile::Profile;
+use hanbeon_core::profile::Profile;
+#[cfg(feature = "desktop")]
+use tauri::LogicalSize;
+#[allow(unused_imports)]
+use tauri::{AppHandle, Manager};
+#[cfg(feature = "desktop")]
+use tauri::{PhysicalPosition, WebviewWindow};
 
 /// 화면 가장자리에서 띄울 여백(논리 px).
+#[cfg(feature = "desktop")]
 const EDGE_MARGIN: f64 = 24.0;
 
 /// 저장된 위치를 되살릴 때 화면 안에 최소한 이만큼은 남아 있어야 한다(물리 px).
+#[cfg(feature = "desktop")]
 const MIN_VISIBLE: i32 = 80;
 
 /// 컨트롤러 창의 가로 폭(논리 px).
+#[cfg(feature = "desktop")]
 const WIDTH: f64 = 360.0;
 
 // 높이는 화면의 CSS 배치와 짝이 맞아야 한다. 어긋나면 칸이 잘리거나 빈 자리가
 // 남는다. 아래 값은 `app/page.tsx`의 배치와 같은 뜻이다.
 /// 손잡이·남은 시간 막대·상태 줄·바깥 여백·그 사이 간격을 모두 더한 값.
+#[cfg(feature = "desktop")]
 const CHROME: f64 = 96.0;
 /// 이동 두 칸이 세로로 쌓인 블록(오른쪽의 선택 칸이 같은 높이를 쓴다).
+#[cfg(feature = "desktop")]
 const MOVE_BLOCK: f64 = 128.0;
 /// 앱별 칸 구분선과 그 위아래 간격.
+#[cfg(feature = "desktop")]
 const DIVIDER: f64 = 28.0;
 /// 칸 한 줄과 칸 사이 여백.
+#[cfg(feature = "desktop")]
 const ROW: f64 = 60.0;
+#[cfg(feature = "desktop")]
 const GAP: f64 = 8.0;
 /// 설정 줄. 가장 드물게 쓰므로 다른 칸보다 낮다.
+#[cfg(feature = "desktop")]
 const SETTINGS_ROW: f64 = 48.0;
 
 /// 이동이 이 시간 동안 멎으면 드래그가 끝난 것으로 본다.
@@ -37,6 +50,7 @@ const SETTLE: Duration = Duration::from_millis(400);
 /// 이동이 멎었는지 확인하는 주기.
 const WATCH_TICK: Duration = Duration::from_millis(100);
 
+#[cfg(feature = "desktop")]
 pub fn prepare_floating(window: &WebviewWindow, saved: Option<(i32, i32)>) -> tauri::Result<()> {
     // 높이를 계산식으로 한 번 맞춘다. tauri.conf.json의 값과 여기 계산이
     // 어긋나면 첫 화면에서 맨 아래 칸이 잘린 채로 시작한다.
@@ -51,6 +65,7 @@ pub fn prepare_floating(window: &WebviewWindow, saved: Option<(i32, i32)>) -> ta
 }
 
 /// 기본 위치는 주 모니터 우하단.
+#[cfg(feature = "desktop")]
 fn place_bottom_right(window: &WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.current_monitor()? else {
         return Ok(());
@@ -75,6 +90,7 @@ fn place_bottom_right(window: &WebviewWindow) -> tauri::Result<()> {
 /// 익힌 것이 매번 무효가 된다.
 ///
 /// 대신 아래로 자라다 화면 밖으로 나갈 수 있다. 그때만 창을 위로 올린다.
+#[cfg(feature = "desktop")]
 pub fn fit_cells(window: &WebviewWindow, extras: usize) -> tauri::Result<()> {
     let mut height = CHROME + MOVE_BLOCK;
 
@@ -89,6 +105,7 @@ pub fn fit_cells(window: &WebviewWindow, extras: usize) -> tauri::Result<()> {
 }
 
 /// 창이 화면 아래로 넘쳤으면 넘친 만큼만 올린다.
+#[cfg(feature = "desktop")]
 fn nudge_onto_screen(window: &WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.current_monitor()? else {
         return Ok(());
@@ -111,6 +128,7 @@ fn nudge_onto_screen(window: &WebviewWindow) -> tauri::Result<()> {
 ///
 /// 모니터를 떼거나 해상도가 바뀌면 지난번 위치가 화면 밖일 수 있다. 그대로
 /// 두면 창이 보이지 않고, 스위치만 쓰는 사용자는 창을 되찾을 수단이 없다.
+#[cfg(feature = "desktop")]
 fn restore(window: &WebviewWindow, position: (i32, i32)) -> tauri::Result<()> {
     if on_screen(window, position)? {
         window.set_position(PhysicalPosition::new(position.0, position.1))
@@ -120,6 +138,7 @@ fn restore(window: &WebviewWindow, position: (i32, i32)) -> tauri::Result<()> {
 }
 
 /// 이 위치에 두었을 때 어느 모니터에든 창이 충분히 걸치는지.
+#[cfg(feature = "desktop")]
 fn on_screen(window: &WebviewWindow, (x, y): (i32, i32)) -> tauri::Result<bool> {
     let size = window.outer_size()?;
     let width = size.width as i32;
@@ -150,6 +169,7 @@ fn on_screen(window: &WebviewWindow, (x, y): (i32, i32)) -> tauri::Result<bool> 
 /// macOS는 `ActivationPolicy::Accessory`(lib.rs)로 앱 자체의 활성화를 먼저 막는다.
 /// 그것만으로 창 클릭 시 활성화가 남는다면 NSPanel + NonactivatingPanel로 승격한다.
 #[allow(unused_variables)]
+#[cfg(feature = "desktop")]
 fn make_non_activating(window: &WebviewWindow) {
     #[cfg(target_os = "windows")]
     {
@@ -202,6 +222,7 @@ impl MoveWatch {
 
     /// 마지막으로 기록된 위치가 있으면 돌려준다. 저장 조건(멎음 여부)은
     /// 보지 않는다. show_floating은 창을 다시 띄울 때 마지막 위치만 필요하다.
+    #[cfg(feature = "desktop")]
     pub fn last(&self) -> Option<(i32, i32)> {
         let slot = self.0.lock().ok()?;
         slot.map(|(_, position)| position)
@@ -237,7 +258,12 @@ impl MoveWatch {
                 let moved = match profile.lock() {
                     Ok(mut profile) if profile.window_position != Some(position) => {
                         profile.window_position = Some(position);
-                        if let Err(message) = profile.save(&app) {
+                        if let Err(message) = app
+                            .path()
+                            .app_config_dir()
+                            .map_err(|error| error.to_string())
+                            .and_then(|dir| profile.save(&dir))
+                        {
                             eprintln!("창 위치를 저장하지 못했습니다. {message}");
                         }
                         true
@@ -285,6 +311,7 @@ pub fn hide_settings(app: &AppHandle) -> Result<(), String> {
 
 /// floating 오버레이를 다시 띄운다. 설치 모드에서 숨긴 floating을 온보딩
 /// 종료 직후 되살려 스캔 컨트롤러가 바로 보이도록 하는 것이 존재 이유다.
+#[cfg(feature = "desktop")]
 pub fn show_floating(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("floating")

@@ -1,0 +1,5 @@
+{
+  "changes": { "package.json": "Patch" },
+  "note": "fix(test): include setTheme in the shared devup-ui mock so the caregiver settings test can load after the Arduino setup suite regardless of test discovery order.",
+  "date": "2026-09-11T09:52:00.000Z"
+}

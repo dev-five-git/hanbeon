@@ -1666,6 +1666,8 @@ dependencies = [
  "core-foundation",
  "enigo",
  "futures",
+ "hanbeon-core",
+ "jni 0.21.1",
  "objc2 0.6.4",
  "objc2-app-kit",
  "reqwest",
@@ -1683,6 +1685,24 @@ dependencies = [
  "uuid",
  "windows-sys 0.61.2",
  "x11rb 0.14.0",
+]
+
+[[package]]
+name = "hanbeon-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hanbeon-jni"
+version = "0.1.0"
+dependencies = [
+ "hanbeon-core",
+ "jni 0.21.1",
+ "serde_json",
 ]
 
 [[package]]
