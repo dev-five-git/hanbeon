@@ -1,6 +1,6 @@
 {
   "name": "hanbeon",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "한번 - 상황적응형 싱글스위치 접근성 소프트웨어",
   "license": "MIT",
   "private": true,
